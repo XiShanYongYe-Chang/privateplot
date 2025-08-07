@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 脚本功能：从文件中读取时间段列表，查询每个时间段内指定用户的贡献值
+# 脚本功能：定义贡献值查询相关的函数
 
 # AUTHOR="foo@bar.com"
 # SINCE_DATE="2022-01-01"
@@ -62,116 +62,164 @@ function contributions-period-deletion {
   return "$result"
 }
 
-# 获取脚本所在目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# AUTHOR="foo@bar.com"
+# SINCE_DATE="2022-01-01"
+# UNTIL_DATE="2023-01-01"
+function contributions-period-commits {
+    local result
+    result=$(git log --no-merges --since ${SINCE_DATE} --until ${UNTIL_DATE} --author "${AUTHOR}" --oneline | wc -l)
+    echo "$result"
+    return "$result"
+}
 
-# 从命令行参数获取文件名，如果未提供则使用默认文件名
-if [ -z "$1" ]; then
-    TIME_PERIODS_FILE="$SCRIPT_DIR/time_periods.txt"
-    echo "使用默认时间段文件: $TIME_PERIODS_FILE"
-else
-    # 如果提供的是相对路径，则相对于脚本目录
-    if [[ "$1" != /* ]]; then
-        TIME_PERIODS_FILE="$SCRIPT_DIR/$1"
-    else
-        TIME_PERIODS_FILE="$1"
-    fi
-fi
+# AUTHOR="foo@bar.com"
+# SINCE_DATE="2022-01-01"
+# UNTIL_DATE="2023-01-01"
+function contributions-period-large-commits-lines {
+    local result
+    result=$(git log --no-merges --since ${SINCE_DATE} --until ${UNTIL_DATE} --author "${AUTHOR}" --numstat |\
+        awk '
+        BEGIN {
+            current_commit = ""
+            commit_lines = 0
+            large_commits_total_lines = 0
+        }
+        /^[0-9a-f]{7,}/ {
+            # 如果上一个commit的代码行数超过1800，累加其代码行数
+            if (current_commit != "" && commit_lines > 1800) {
+                large_commits_total_lines += commit_lines
+            }
+            # 开始新的commit
+            current_commit = $0
+            commit_lines = 0
+        }
+        /^[0-9]+\t[0-9]+/ {
+            # 累加代码行数（新增+删除）
+            commit_lines += $1 + $2
+        }
+        END {
+            # 检查最后一个commit
+            if (current_commit != "" && commit_lines > 1800) {
+                large_commits_total_lines += commit_lines
+            }
+            print large_commits_total_lines
+        }')
+    echo "$result"
+    return "$result"
+}
 
-if [ -z "$2" ]; then
-    USERS_FILE="$SCRIPT_DIR/users.txt"
-    echo "使用默认用户文件: $USERS_FILE"
-else
-    # 如果提供的是相对路径，则相对于脚本目录
-    if [[ "$2" != /* ]]; then
-        USERS_FILE="$SCRIPT_DIR/$2"
-    else
-        USERS_FILE="$2"
-    fi
-fi
+# AUTHOR="foo@bar.com"
+# SINCE_DATE="2022-01-01"
+# UNTIL_DATE="2023-01-01"
+function contributions-period-large-commits-addition {
+    local result
+    result=$(git log --no-merges --since ${SINCE_DATE} --until ${UNTIL_DATE} --author "${AUTHOR}" --numstat |\
+        awk '
+        BEGIN {
+            current_commit = ""
+            commit_lines = 0
+            commit_addition = 0
+            large_commits_total_addition = 0
+        }
+        /^[0-9a-f]{7,}/ {
+            # 如果上一个commit的代码行数超过1800，累加其新增代码行数
+            if (current_commit != "" && commit_lines > 1800) {
+                large_commits_total_addition += commit_addition
+            }
+            # 开始新的commit
+            current_commit = $0
+            commit_lines = 0
+            commit_addition = 0
+        }
+        /^[0-9]+\t[0-9]+/ {
+            # 累加代码行数（新增+删除）
+            commit_lines += $1 + $2
+            # 累加新增代码行数
+            commit_addition += $1
+        }
+        END {
+            # 检查最后一个commit
+            if (current_commit != "" && commit_lines > 1800) {
+                large_commits_total_addition += commit_addition
+            }
+            print large_commits_total_addition
+        }')
+    echo "$result"
+    return "$result"
+}
 
-# 显示用法信息（如果没有提供参数）
-if [ $# -eq 0 ]; then
-    echo "用法: $0 [时间段文件] [用户列表文件]"
-    echo "示例: $0 time_periods.txt users.txt"
-    echo ""
-    echo "注意:"
-    echo "- 如果不提供参数，将使用脚本目录下的默认文件"
-    echo "- 如果提供相对路径，将相对于脚本目录解析"
-    echo "- 如果提供绝对路径，将直接使用"
-    echo ""
-    echo "时间文件格式示例:"
-    echo "2024-01-01,2024-01-31"
-    echo "2024-02-01,2024-02-28"
-    echo ""
-fi
+# AUTHOR="foo@bar.com"
+# SINCE_DATE="2022-01-01"
+# UNTIL_DATE="2023-01-01"
+function contributions-period-large-commits-deletion {
+    local result
+    result=$(git log --no-merges --since ${SINCE_DATE} --until ${UNTIL_DATE} --author "${AUTHOR}" --numstat |\
+        awk '
+        BEGIN {
+            current_commit = ""
+            commit_lines = 0
+            commit_deletion = 0
+            large_commits_total_deletion = 0
+        }
+        /^[0-9a-f]{7,}/ {
+            # 如果上一个commit的代码行数超过1800，累加其删除代码行数
+            if (current_commit != "" && commit_lines > 1800) {
+                large_commits_total_deletion += commit_deletion
+            }
+            # 开始新的commit
+            current_commit = $0
+            commit_lines = 0
+            commit_deletion = 0
+        }
+        /^[0-9]+\t[0-9]+/ {
+            # 累加代码行数（新增+删除）
+            commit_lines += $1 + $2
+            # 累加删除代码行数
+            commit_deletion += $2
+        }
+        END {
+            # 检查最后一个commit
+            if (current_commit != "" && commit_lines > 1800) {
+                large_commits_total_deletion += commit_deletion
+            }
+            print large_commits_total_deletion
+        }')
+    echo "$result"
+    return "$result"
+}
 
-# 检查时间文件是否存在
-if [ ! -f "$TIME_PERIODS_FILE" ]; then
-    echo "错误: 时间段文件 $TIME_PERIODS_FILE 不存在"
-    exit 1
-fi
-
-# 检查用户文件是否存在
-if [ ! -f "$USERS_FILE" ]; then
-    echo "错误: 用户文件 $USERS_FILE 不存在"
-    exit 1
-fi
-
-# 初始化用户数组
-USERS=()
-
-# 从文件读取用户或者逐行读取
-while IFS= read -r AUTHOR; do
-    # 跳过空行和注释行
-    if [[ -n "$AUTHOR" && "$AUTHOR" != \#* ]]; then
-        USERS+=("$AUTHOR")
-    fi
-done < "$USERS_FILE"
-
-# 检查是否提供了用户列表
-if [ ${#USERS[@]} -eq 0 ]; then
-    echo "错误: 必须指定至少一个用户"
-    exit 1
-fi
-
-# 检查contributions-period-total函数是否可用
-if ! type contributions-period-total >/dev/null 2>&1; then
-    echo "错误: contributions-period-total 函数未定义"
-    echo "请确保已加载包含该函数的脚本或环境"
-    exit 1
-fi
-
-# 读取时间段文件并处理每个时间段
-while IFS=',' read -r SINCE_DATE UNTIL_DATE || [ -n "$SINCE_DATE" ]; do
-    # 跳过空行和注释行(以#开头的行)
-    if [[ -z "$SINCE_DATE" || "$SINCE_DATE" == \#* ]]; then
-        continue
-    fi
-
-    # 验证日期格式(简单验证)
-    if ! [[ "$SINCE_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] ||
-       ! [[ "$UNTIL_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-        echo "警告: 跳过无效日期格式的行: $SINCE_DATE,$UNTIL_DATE"
-        continue
-    fi
-
-    echo "========================================"
-    echo "处理时间段: $SINCE_DATE 至 $UNTIL_DATE"
-    echo "========================================"
-
-    # 对每个用户查询贡献值
-    for AUTHOR in "${USERS[@]}"; do
-        echo "查询用户: $AUTHOR 的贡献值"
-
-        # 调用函数并获取结果
-        result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-total)
-        echo "贡献值: $result"
-
-        echo "----------------------------------------"
-    done
-
-    echo ""
-done < "$TIME_PERIODS_FILE"
-
-echo "所有时间段处理完成"
+# AUTHOR="foo@bar.com"
+# SINCE_DATE="2022-01-01"
+# UNTIL_DATE="2023-01-01"
+function contributions-period-large-commits-count {
+    local result
+    result=$(git log --no-merges --since ${SINCE_DATE} --until ${UNTIL_DATE} --author "${AUTHOR}" --numstat |\
+        awk '
+        BEGIN {
+            current_commit = ""
+            commit_lines = 0
+            large_commits_count = 0
+        }
+        /^[0-9a-f]{7,}/ {
+            # 如果上一个commit的代码行数超过1800，计数加1
+            if (current_commit != "" && commit_lines > 1800) {
+                large_commits_count++
+            }
+            # 开始新的commit
+            current_commit = $0
+            commit_lines = 0
+        }
+        /^[0-9]+\t[0-9]+/ {
+            # 累加代码行数（新增+删除）
+            commit_lines += $1 + $2
+        }
+        END {
+            # 检查最后一个commit
+            if (current_commit != "" && commit_lines > 1800) {
+                large_commits_count++
+            }
+            print large_commits_count
+        }')
+    echo "$result"
+    return "$result"
+}
