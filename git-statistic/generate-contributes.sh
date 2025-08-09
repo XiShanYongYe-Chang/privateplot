@@ -134,12 +134,7 @@ if ! type contributions-period-large-commits-count >/dev/null 2>&1; then
     exit 1
 fi
 
-# 设置输出文件（保存到当前工作目录）
-OUTPUT_FILE="contributions_report.csv"
-echo "输出文件: $OUTPUT_FILE"
-
-# 创建CSV文件并写入表头
-echo "用户名,时间段,新增代码行数,删除代码行数,贡献代码总行数,代码提交次数,超大提交代码行数(>1800行/commit),超大提交新增代码行数(>1800行/commit),超大提交删除代码行数(>1800行/commit),超大提交次数(>1800行/commit)" > "$OUTPUT_FILE"
+# 输出文件按时间段分别生成（见下方循环）；文件名示例：contributions_YYYY-MM-DD_YYYY-MM-DD.csv
 
 # 首先读取所有时间段到数组中
 PERIODS=()
@@ -159,27 +154,18 @@ while IFS=',' read -r SINCE_DATE UNTIL_DATE || [ -n "$SINCE_DATE" ]; do
     PERIODS+=("$SINCE_DATE,$UNTIL_DATE")
 done < "$TIME_PERIODS_FILE"
 
-# 对每个用户进行处理
-for AUTHOR in "${USERS[@]}"; do
-    echo "========================================"
-    echo "处理用户: $AUTHOR"
-    echo "========================================"
-    
-    # 初始化该用户的总计数据
-    user_total_addition=0
-    user_total_deletion=0
-    user_total_lines=0
-    user_total_commits=0
-    user_total_large_commits=0
-    user_total_large_addition=0
-    user_total_large_deletion=0
-    user_total_large_count=0
-    
-    # 对该用户的所有时间段进行计算
-    for period in "${PERIODS[@]}"; do
-        IFS=',' read -r SINCE_DATE UNTIL_DATE <<< "$period"
-        PERIOD="$SINCE_DATE - $UNTIL_DATE"
-        
+# 遍历每个时间段，分别输出一个CSV文件
+for period in "${PERIODS[@]}"; do
+    IFS=',' read -r SINCE_DATE UNTIL_DATE <<< "$period"
+    PERIOD="$SINCE_DATE - $UNTIL_DATE"
+
+    # 设置该时间段的输出文件
+    OUTPUT_FILE="contributions_${SINCE_DATE}_${UNTIL_DATE}.csv"
+    echo "输出文件: $OUTPUT_FILE"
+    echo "用户名,新增代码行数,删除代码行数,贡献代码总行数,代码提交次数,超大提交代码行数(>1800行/commit),超大提交新增代码行数(>1800行/commit),超大提交删除代码行数(>1800行/commit),超大提交次数(>1800行/commit)" > "$OUTPUT_FILE"
+
+    # 对每个用户进行处理
+    for AUTHOR in "${USERS[@]}"; do
         echo "查询用户: $AUTHOR 在时间段 $PERIOD 的贡献值"
 
         # 调用函数并获取新增代码行数
@@ -248,40 +234,15 @@ for AUTHOR in "${USERS[@]}"; do
         
         echo "新增: $addition_result, 删除: $deletion_result，总行数: $total_result, 提交次数: $commits_result, 大提交代码行数: $large_commits_result, 大提交新增: $large_addition_result, 大提交删除: $large_deletion_result, 大提交次数: $large_count_result"
 
-        # 累加到用户总计
-        user_total_addition=$((user_total_addition + addition_result))
-        user_total_deletion=$((user_total_deletion + deletion_result))
-        user_total_lines=$((user_total_lines + total_result))
-        user_total_commits=$((user_total_commits + commits_result))
-        user_total_large_commits=$((user_total_large_commits + large_commits_result))
-        user_total_large_addition=$((user_total_large_addition + large_addition_result))
-        user_total_large_deletion=$((user_total_large_deletion + large_deletion_result))
-        user_total_large_count=$((user_total_large_count + large_count_result))
-
         # 写入CSV文件（使用逗号分隔，如果用户名包含逗号则用双引号包围）
         if [[ "$AUTHOR" == *","* ]]; then
-            echo "\"$AUTHOR\",\"$PERIOD\",$addition_result,$deletion_result,$total_result,$commits_result,$large_commits_result,$large_addition_result,$large_deletion_result,$large_count_result" >> "$OUTPUT_FILE"
+            echo "\"$AUTHOR\",$addition_result,$deletion_result,$total_result,$commits_result,$large_commits_result,$large_addition_result,$large_deletion_result,$large_count_result" >> "$OUTPUT_FILE"
         else
-            echo "$AUTHOR,$PERIOD,$addition_result,$deletion_result,$total_result,$commits_result,$large_commits_result,$large_addition_result,$large_deletion_result,$large_count_result" >> "$OUTPUT_FILE"
+            echo "$AUTHOR,$addition_result,$deletion_result,$total_result,$commits_result,$large_commits_result,$large_addition_result,$large_deletion_result,$large_count_result" >> "$OUTPUT_FILE"
         fi
     done
-    
-    # 输出该用户的总计数据
-    echo "----------------------------------------"
-    echo "用户 $AUTHOR 总计:"
-    echo "总新增: $user_total_addition, 总删除: $user_total_deletion, 总行数: $user_total_lines, 总提交次数: $user_total_commits, 总大提交代码行数: $user_total_large_commits, 总大提交新增: $user_total_large_addition, 总大提交删除: $user_total_large_deletion, 总大提交次数: $user_total_large_count"
-    echo "----------------------------------------"
-    
-    # 写入用户总计行到CSV文件
-    if [[ "$AUTHOR" == *","* ]]; then
-        echo "\"$AUTHOR\",\"所有时间段总计\",$user_total_addition,$user_total_deletion,$user_total_lines,$user_total_commits,$user_total_large_commits,$user_total_large_addition,$user_total_large_deletion,$user_total_large_count" >> "$OUTPUT_FILE"
-    else
-        echo "$AUTHOR,所有时间段总计,$user_total_addition,$user_total_deletion,$user_total_lines,$user_total_commits,$user_total_large_commits,$user_total_large_addition,$user_total_large_deletion,$user_total_large_count" >> "$OUTPUT_FILE"
-    fi
-    
-    echo ""
+
 done
 
 echo "所有时间段处理完成"
-echo "结果已保存到: $OUTPUT_FILE"
-echo "您可以用Excel打开此CSV文件查看详细结果"
+echo "已为每个时间段分别生成CSV文件"
