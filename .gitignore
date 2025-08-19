@@ -1,0 +1,16 @@
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+_tmp/
+_output/
+
+# input default files
+.git-statistic/time_periods.txt
+.git-statistic/users.txt
+.git-statistic/repos.txt
+
+.idea/
+.vscode/
+
