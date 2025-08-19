@@ -8,38 +8,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # 加载函数定义
 source "$SCRIPT_DIR/by-developer.sh"
 
-# 从命令行参数获取文件名，如果未提供则使用默认文件名
-if [ -z "$1" ]; then
-    TIME_PERIODS_FILE="$SCRIPT_DIR/time_periods.txt"
-    echo "使用默认时间段文件: $TIME_PERIODS_FILE"
-else
-    # 如果提供的是相对路径，则相对于脚本目录
-    if [[ "$1" != /* ]]; then
-        TIME_PERIODS_FILE="$SCRIPT_DIR/$1"
-    else
-        TIME_PERIODS_FILE="$1"
-    fi
-fi
+# 解析命令行参数
+REPO_DIR=""
+BRANCH_NAME=""
+REMOTE_NAME=""
+TIME_PERIODS_FILE=""
+USERS_FILE=""
 
-if [ -z "$2" ]; then
-    USERS_FILE="$SCRIPT_DIR/users.txt"
-    echo "使用默认用户文件: $USERS_FILE"
-else
-    # 如果提供的是相对路径，则相对于脚本目录
-    if [[ "$2" != /* ]]; then
-        USERS_FILE="$SCRIPT_DIR/$2"
-    else
-        USERS_FILE="$2"
-    fi
-fi
-
-# 显示用法信息（如果没有提供参数）
-if [ $# -eq 0 ]; then
-    echo "用法: $0 [时间段文件] [用户列表文件]"
-    echo "示例: $0 time_periods.txt users.txt"
+# 显示用法信息函数
+show_usage() {
+    echo "用法: $0 <仓库目录> <分支名称> <远程仓库名称> [时间段文件] [用户列表文件]"
+    echo "示例: $0 /path/to/repo main origin time_periods.txt users.txt"
+    echo ""
+    echo "参数说明："
+    echo "  仓库目录       - Git仓库所在的目录路径"
+    echo "  分支名称       - 要切换到的分支名称"
+    echo "  远程仓库名称   - 远程仓库名称（如：origin）"
+    echo "  时间段文件     - 包含时间段的文件（可选，默认：time_periods.txt）"
+    echo "  用户列表文件   - 包含用户列表的文件（可选，默认：users.txt）"
     echo ""
     echo "注意:"
-    echo "- 如果不提供参数，将使用脚本目录下的默认文件"
+    echo "- 前三个参数为必需参数"
+    echo "- 如果不提供时间段文件和用户列表文件，将使用脚本目录下的默认文件"
     echo "- 如果提供相对路径，将相对于脚本目录解析"
     echo "- 如果提供绝对路径，将直接使用"
     echo ""
@@ -47,7 +37,111 @@ if [ $# -eq 0 ]; then
     echo "2024-01-01,2024-01-31"
     echo "2024-02-01,2024-02-28"
     echo ""
+}
+
+# 检查参数数量
+if [ $# -lt 3 ]; then
+    echo "错误: 必须提供至少三个参数：仓库目录、分支名称和远程仓库名称"
+    show_usage
+    exit 1
 fi
+
+# 获取必需的参数
+REPO_DIR="$1"
+BRANCH_NAME="$2"  
+REMOTE_NAME="$3"
+
+# 获取可选的文件参数
+if [ -z "$4" ]; then
+    TIME_PERIODS_FILE="$SCRIPT_DIR/time_periods.txt"
+    echo "使用默认时间段文件: $TIME_PERIODS_FILE"
+else
+    # 如果提供的是相对路径，则相对于脚本目录
+    if [[ "$4" != /* ]]; then
+        TIME_PERIODS_FILE="$SCRIPT_DIR/$4"
+    else
+        TIME_PERIODS_FILE="$4"
+    fi
+fi
+
+if [ -z "$5" ]; then
+    USERS_FILE="$SCRIPT_DIR/users.txt"
+    echo "使用默认用户文件: $USERS_FILE"
+else
+    # 如果提供的是相对路径，则相对于脚本目录
+    if [[ "$5" != /* ]]; then
+        USERS_FILE="$SCRIPT_DIR/$5"
+    else
+        USERS_FILE="$5"
+    fi
+fi
+
+# 显示用法信息（如果没有提供参数）
+if [ $# -eq 0 ]; then
+    show_usage
+    exit 0
+fi
+
+# 检查仓库目录是否存在
+if [ ! -d "$REPO_DIR" ]; then
+    echo "错误: 仓库目录 $REPO_DIR 不存在"
+    exit 1
+fi
+
+# 检查是否为Git仓库
+if [ ! -d "$REPO_DIR/.git" ]; then
+    echo "错误: $REPO_DIR 不是一个Git仓库"
+    exit 1
+fi
+
+# 进入仓库目录
+echo "进入仓库目录: $REPO_DIR"
+cd "$REPO_DIR" || {
+    echo "错误: 无法进入目录 $REPO_DIR"
+    exit 1
+}
+
+# 检查分支是否存在（包括远程分支）
+echo "检查分支 $BRANCH_NAME 是否存在..."
+if ! git show-ref --verify --quiet refs/heads/"$BRANCH_NAME" && ! git show-ref --verify --quiet refs/remotes/"$REMOTE_NAME"/"$BRANCH_NAME"; then
+    echo "警告: 分支 $BRANCH_NAME 在本地和远程都不存在，将尝试从远程创建"
+fi
+
+# 拉取远程仓库的最新代码
+echo "从远程仓库 $REMOTE_NAME 拉取最新代码..."
+git fetch "$REMOTE_NAME" || {
+    echo "错误: 无法从远程仓库 $REMOTE_NAME 拉取代码"
+    exit 1
+}
+
+# 切换到指定分支
+echo "切换到分支: $BRANCH_NAME"
+if git show-ref --verify --quiet refs/heads/"$BRANCH_NAME"; then
+    # 本地分支存在，直接切换
+    git checkout "$BRANCH_NAME" || {
+        echo "错误: 无法切换到分支 $BRANCH_NAME"
+        exit 1
+    }
+elif git show-ref --verify --quiet refs/remotes/"$REMOTE_NAME"/"$BRANCH_NAME"; then
+    # 远程分支存在，创建并切换到本地分支
+    git checkout -b "$BRANCH_NAME" "$REMOTE_NAME/$BRANCH_NAME" || {
+        echo "错误: 无法创建并切换到分支 $BRANCH_NAME"
+        exit 1
+    }
+else
+    echo "错误: 分支 $BRANCH_NAME 在远程仓库 $REMOTE_NAME 中不存在"
+    exit 1
+fi
+
+# 执行rebase操作
+echo "执行rebase操作..."
+git rebase "$REMOTE_NAME/$BRANCH_NAME" || {
+    echo "错误: rebase操作失败"
+    echo "请手动解决冲突后重新运行脚本"
+    exit 1
+}
+
+echo "Git操作完成，开始查询贡献值..."
 
 # 检查时间文件是否存在
 if [ ! -f "$TIME_PERIODS_FILE" ]; then
@@ -159,8 +253,8 @@ for period in "${PERIODS[@]}"; do
     IFS=',' read -r SINCE_DATE UNTIL_DATE <<< "$period"
     PERIOD="$SINCE_DATE - $UNTIL_DATE"
 
-    # 设置该时间段的输出文件
-    OUTPUT_FILE="contributions_${SINCE_DATE}_${UNTIL_DATE}.csv"
+    # 设置该时间段的输出文件（保存在脚本目录）
+    OUTPUT_FILE="$SCRIPT_DIR/contributions_${SINCE_DATE}_${UNTIL_DATE}.csv"
     echo "输出文件: $OUTPUT_FILE"
     echo "用户名,新增代码行数,删除代码行数,贡献代码总行数,代码提交次数,超大提交代码行数(>1800行/commit),超大提交新增代码行数(>1800行/commit),超大提交删除代码行数(>1800行/commit),超大提交次数(>1800行/commit)" > "$OUTPUT_FILE"
 
