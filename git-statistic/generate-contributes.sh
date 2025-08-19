@@ -17,18 +17,18 @@ USERS_FILE=""
 
 # 显示用法信息函数
 show_usage() {
-    echo "用法: $0 <仓库目录> <分支名称> <远程仓库名称> [时间段文件] [用户列表文件]"
-    echo "示例: $0 /path/to/repo main origin time_periods.txt users.txt"
+    echo "用法: $0 <仓库目录> <分支名称> [远程仓库名称] [时间段文件] [用户列表文件]"
+    echo "示例: $0 /path/to/repo main upstream time_periods.txt users.txt"
     echo ""
     echo "参数说明："
     echo "  仓库目录       - Git仓库所在的目录路径"
     echo "  分支名称       - 要切换到的分支名称"
-    echo "  远程仓库名称   - 远程仓库名称（如：origin）"
+    echo "  远程仓库名称   - 远程仓库名称（可选，默认：upstream）"
     echo "  时间段文件     - 包含时间段的文件（可选，默认：time_periods.txt）"
     echo "  用户列表文件   - 包含用户列表的文件（可选，默认：users.txt）"
     echo ""
     echo "注意:"
-    echo "- 前三个参数为必需参数"
+    echo "- 前两个参数为必需参数"
     echo "- 如果不提供时间段文件和用户列表文件，将使用脚本目录下的默认文件"
     echo "- 如果提供相对路径，将相对于脚本目录解析"
     echo "- 如果提供绝对路径，将直接使用"
@@ -40,16 +40,23 @@ show_usage() {
 }
 
 # 检查参数数量
-if [ $# -lt 3 ]; then
-    echo "错误: 必须提供至少三个参数：仓库目录、分支名称和远程仓库名称"
+if [ $# -lt 2 ]; then
+    echo "错误: 必须提供至少两个参数：仓库目录和分支名称"
     show_usage
     exit 1
 fi
 
 # 获取必需的参数
 REPO_DIR="$1"
-BRANCH_NAME="$2"  
-REMOTE_NAME="$3"
+BRANCH_NAME="$2"
+
+# 获取可选的远程仓库名称参数
+if [ -z "$3" ]; then
+    REMOTE_NAME="upstream"
+    echo "使用默认远程仓库名称: $REMOTE_NAME"
+else
+    REMOTE_NAME="$3"
+fi
 
 # 获取可选的文件参数
 if [ -z "$4" ]; then
@@ -142,6 +149,10 @@ git rebase "$REMOTE_NAME/$BRANCH_NAME" || {
 }
 
 echo "Git操作完成，开始查询贡献值..."
+
+# 从仓库目录路径中提取仓库名称
+REPO_NAME=$(basename "$REPO_DIR")
+echo "仓库名称: $REPO_NAME"
 
 # 检查时间文件是否存在
 if [ ! -f "$TIME_PERIODS_FILE" ]; then
@@ -254,7 +265,7 @@ for period in "${PERIODS[@]}"; do
     PERIOD="$SINCE_DATE - $UNTIL_DATE"
 
     # 设置该时间段的输出文件（保存在脚本目录）
-    OUTPUT_FILE="$SCRIPT_DIR/contributions_${SINCE_DATE}_${UNTIL_DATE}.csv"
+    OUTPUT_FILE="$SCRIPT_DIR/contributions_${REPO_NAME}_${BRANCH_NAME}_${SINCE_DATE}_${UNTIL_DATE}.csv"
     echo "输出文件: $OUTPUT_FILE"
     echo "用户名,新增代码行数,删除代码行数,贡献代码总行数,代码提交次数,超大提交代码行数(>1800行/commit),超大提交新增代码行数(>1800行/commit),超大提交删除代码行数(>1800行/commit),超大提交次数(>1800行/commit)" > "$OUTPUT_FILE"
 
