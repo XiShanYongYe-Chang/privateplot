@@ -1,0 +1,31 @@
+# 仓库配置文件
+# 格式：<仓库目录路径> <分支名称> [远程仓库名称]
+# 远程仓库名称为可选，默认为upstream
+
+# Karmada repos
+/root/go/src/github.com/karmada-io/karmada master 
+/root/go/src/github.com/karmada-io/dashboard main
+/root/go/src/github.com/karmada-io/websitec main
+/root/go/src/github.com/karmada-io/multicluster-cloud-provider main
+/root/go/src/github.com/karmada-io/community main
+# KubeEdge repos
+/root/go/src/github.com/kubeedge/kubeedge master
+/root/go/src/github.com/kubeedge/keink main
+/root/go/src/github.com/kubeedge/website master
+/root/go/src/github.com/kubeedge/mapper-framework main
+/root/go/src/github.com/kubeedge/dashboard main
+# Kmesh repos
+/root/go/src/github.com/kmesh-net/kmesh main
+/root/go/src/github.com/kmesh-net/orion main
+/root/go/src/github.com/kmesh-net/website main
+/root/go/src/github.com/kmesh-net/community main
+# volcano repos
+/root/go/src/github.com/volcano-sh/volcano master
+/root/go/src/github.com/volcano-sh/volcano-global main
+/root/go/src/github.com/volcano-sh/website master
+/root/go/src/github.com/volcano-sh/apis master
+/root/go/src/github.com/volcano-sh/community master
+/root/go/src/github.com/volcano-sh/helm-charts main
+/root/go/src/github.com/volcano-sh/descheduler main
+# other repos
+/root/go/src/sigs.k8s.io/lws main
