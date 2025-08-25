@@ -97,6 +97,9 @@ TOTAL_REPOS=0
 SUCCESS_COUNT=0
 FAILED_COUNT=0
 
+# 存储所有生成的CSV文件
+ALL_CSV_FILES=()
+
 # 读取仓库配置文件并处理每个仓库
 while IFS= read -r line || [ -n "$line" ]; do
     # 跳过空行和注释行
@@ -131,6 +134,37 @@ while IFS= read -r line || [ -n "$line" ]; do
     if "$GENERATE_SCRIPT" "$REPO_DIR" "$BRANCH_NAME" "$REMOTE_NAME" "$TIME_PERIODS_FILE" "$USERS_FILE"; then
         echo "✓ 仓库 $(basename "$REPO_DIR") 处理成功"
         SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+        
+        # 记录该仓库生成的CSV文件
+        # 使用更完整的路径信息来避免重名
+        REPO_NAME=$(basename "$REPO_DIR")
+        # 从路径中提取组织名，例如从 /root/go/src/github.com/karmada-io/website 提取 karmada-io
+        if [[ "$REPO_DIR" =~ github\.com/([^/]+)/([^/]+) ]]; then
+            ORG_NAME="${BASH_REMATCH[1]}"
+            REPO_BASENAME="${BASH_REMATCH[2]}"
+            UNIQUE_REPO_NAME="${ORG_NAME}_${REPO_BASENAME}"
+        else
+            # 如果不是标准的github路径，使用父目录名+仓库名
+            PARENT_DIR=$(basename "$(dirname "$REPO_DIR")")
+            UNIQUE_REPO_NAME="${PARENT_DIR}_${REPO_NAME}"
+        fi
+        
+        # 读取时间段文件，记录生成的CSV文件
+        while IFS=',' read -r SINCE_DATE UNTIL_DATE || [ -n "$SINCE_DATE" ]; do
+            # 跳过空行和注释行
+            if [[ -z "$SINCE_DATE" || "$SINCE_DATE" == \#* ]]; then
+                continue
+            fi
+            
+            # 验证日期格式
+            if [[ "$SINCE_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && [[ "$UNTIL_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+                CSV_FILE="$SCRIPT_DIR/contributions_${UNIQUE_REPO_NAME}_${BRANCH_NAME}_${SINCE_DATE}_${UNTIL_DATE}.csv"
+                if [ -f "$CSV_FILE" ]; then
+                    ALL_CSV_FILES+=("$CSV_FILE")
+                fi
+            fi
+        done < "$SCRIPT_DIR/$TIME_PERIODS_FILE"
+        
     else
         echo "✗ 仓库 $(basename "$REPO_DIR") 处理失败"
         FAILED_COUNT=$((FAILED_COUNT + 1))
@@ -145,6 +179,194 @@ echo "总计仓库数量: $TOTAL_REPOS"
 echo "成功处理: $SUCCESS_COUNT"
 echo "处理失败: $FAILED_COUNT"
 echo "========================================="
+
+# 如果有成功处理的仓库，开始合并处理
+if [ $SUCCESS_COUNT -gt 0 ]; then
+    echo ""
+    echo "开始合并同一时间段的CSV文件..."
+    
+    # 检查是否安装了csvkit或其他CSV处理工具
+    if ! command -v csvstack >/dev/null 2>&1; then
+        echo "警告: 未找到csvstack命令，尝试安装csvkit..."
+        pip install csvkit 2>/dev/null || {
+            echo "警告: 无法安装csvkit，将使用简单的文本合并方式"
+            USE_SIMPLE_MERGE=true
+        }
+    fi
+    
+    # 读取时间段文件并为每个时间段合并文件
+    while IFS=',' read -r SINCE_DATE UNTIL_DATE || [ -n "$SINCE_DATE" ]; do
+        # 跳过空行和注释行
+        if [[ -z "$SINCE_DATE" || "$SINCE_DATE" == \#* ]]; then
+            continue
+        fi
+        
+        # 验证日期格式
+        if ! [[ "$SINCE_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || ! [[ "$UNTIL_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            continue
+        fi
+        
+        echo "处理时间段: $SINCE_DATE 到 $UNTIL_DATE"
+        
+        # 查找该时间段的所有CSV文件
+        PERIOD_FILES=()
+        for csv_file in "${ALL_CSV_FILES[@]}"; do
+            if [[ "$csv_file" == *"_${SINCE_DATE}_${UNTIL_DATE}.csv" ]]; then
+                if [ -f "$csv_file" ]; then
+                    PERIOD_FILES+=("$csv_file")
+                fi
+            fi
+        done
+        
+        if [ ${#PERIOD_FILES[@]} -eq 0 ]; then
+            echo "警告: 未找到时间段 $SINCE_DATE 到 $UNTIL_DATE 的CSV文件"
+            continue
+        fi
+        
+        echo "找到 ${#PERIOD_FILES[@]} 个文件需要合并"
+        
+        # 设置合并后的临时文件名
+        MERGED_CSV="$SCRIPT_DIR/merged_contributions_${SINCE_DATE}_${UNTIL_DATE}.csv"
+        FINAL_EXCEL="$SCRIPT_DIR/contributions_${SINCE_DATE}_${UNTIL_DATE}.xlsx"
+        
+        # 创建合并后的CSV文件头
+        echo "用户名,仓库,分支,新增代码行数,删除代码行数,贡献代码总行数,代码提交次数,超大提交代码行数(>1800行/commit),超大提交新增代码行数(>1800行/commit),超大提交删除代码行数(>1800行/commit),超大提交次数(>1800行/commit)" > "$MERGED_CSV"
+        
+                 # 合并所有文件的数据（跳过标题行）
+         for csv_file in "${PERIOD_FILES[@]}"; do
+             # 从文件名提取仓库名和分支名
+             filename=$(basename "$csv_file")
+             # 移除前缀和后缀，提取仓库名和分支名
+             temp=${filename#contributions_}
+             temp=${temp%_${SINCE_DATE}_${UNTIL_DATE}.csv}
+             
+             # 分割仓库名和分支名（现在仓库名可能包含组织名，格式为 org_repo_branch）
+             # 使用更智能的方式分割：最后一个下划线之前的是仓库名，之后的是分支名
+             if [[ "$temp" =~ ^(.+)_([^_]+)$ ]]; then
+                 repo_name="${BASH_REMATCH[1]}"
+                 branch_name="${BASH_REMATCH[2]}"
+             else
+                 repo_name="$temp"
+                 branch_name="unknown"
+             fi
+            
+            # 读取CSV文件（跳过标题行）并添加仓库和分支信息
+            {
+                tail -n +2 "$csv_file" | while IFS=',' read -r user add del total commits large_lines large_add large_del large_count; do
+                    # 处理可能包含引号的用户名
+                    user=$(echo "$user" | sed 's/^"//;s/"$//')
+                    echo "\"$user\",\"$repo_name\",\"$branch_name\",$add,$del,$total,$commits,$large_lines,$large_add,$large_del,$large_count"
+                done
+            } >> "$MERGED_CSV"
+        done
+        
+        # 对合并文件按用户名排序
+        SORTED_DETAIL_CSV="$SCRIPT_DIR/sorted_detail_contributions_${SINCE_DATE}_${UNTIL_DATE}.csv"
+        
+        # 首先提取表头
+        head -n 1 "$MERGED_CSV" > "$SORTED_DETAIL_CSV"
+        
+        # 然后对数据按用户名排序
+        tail -n +2 "$MERGED_CSV" | sort -t',' -k1,1 >> "$SORTED_DETAIL_CSV"
+        
+        # 创建汇总数据（按用户聚合）
+        SUMMARY_CSV="$SCRIPT_DIR/summary_contributions_${SINCE_DATE}_${UNTIL_DATE}.csv"
+        echo "用户名,新增代码行数,删除代码行数,贡献代码总行数,代码提交次数,超大提交代码行数(>1800行/commit),超大提交新增代码行数(>1800行/commit),超大提交删除代码行数(>1800行/commit),超大提交次数(>1800行/commit)" > "$SUMMARY_CSV"
+        
+        # 使用awk来汇总数据
+        tail -n +2 "$MERGED_CSV" | awk -F',' '
+        {
+            user = $1
+            gsub(/^"|"$/, "", user)  # 移除引号
+            add[user] += $4
+            del[user] += $5
+            total[user] += $6
+            commits[user] += $7
+            large_lines[user] += $8
+            large_add[user] += $9
+            large_del[user] += $10
+            large_count[user] += $11
+        }
+        END {
+            # 将用户名存储到数组中以便排序
+            n = 0
+            for (u in add) {
+                users[n++] = u
+            }
+            # 简单的冒泡排序按用户名首字母排序
+            for (i = 0; i < n-1; i++) {
+                for (j = 0; j < n-1-i; j++) {
+                    if (tolower(users[j]) > tolower(users[j+1])) {
+                        temp = users[j]
+                        users[j] = users[j+1]
+                        users[j+1] = temp
+                    }
+                }
+            }
+            # 输出排序后的结果
+            for (i = 0; i < n; i++) {
+                u = users[i]
+                printf "\"%s\",%d,%d,%d,%d,%d,%d,%d,%d\n", u, add[u], del[u], total[u], commits[u], large_lines[u], large_add[u], large_del[u], large_count[u]
+            }
+        }' >> "$SUMMARY_CSV"
+        
+        # 尝试转换为Excel格式
+        CONVERTER_SCRIPT="$SCRIPT_DIR/csv_to_excel.py"
+        if [ -f "$CONVERTER_SCRIPT" ] && command -v python3 >/dev/null 2>&1; then
+            echo "正在转换为Excel格式（包含详细数据和汇总数据）..."
+            python3 "$CONVERTER_SCRIPT" "$SORTED_DETAIL_CSV" "$SUMMARY_CSV" "$FINAL_EXCEL" && {
+                # 删除临时CSV文件
+                rm -f "$MERGED_CSV" "$SORTED_DETAIL_CSV" "$SUMMARY_CSV"
+            } || {
+                echo "警告: Excel转换失败，保留CSV格式文件"
+                mv "$SORTED_DETAIL_CSV" "${SORTED_DETAIL_CSV%.csv}_final.csv"
+                mv "$SUMMARY_CSV" "${SUMMARY_CSV%.csv}_final.csv"
+                rm -f "$MERGED_CSV"
+            }
+        elif command -v ssconvert >/dev/null 2>&1; then
+            echo "使用ssconvert转换为Excel格式（仅汇总数据）..."
+            ssconvert "$SUMMARY_CSV" "$FINAL_EXCEL" 2>/dev/null && {
+                echo "✓ 成功生成Excel文件: $FINAL_EXCEL"
+                echo "注意: 由于使用ssconvert，仅包含汇总数据，详细数据已保存为CSV文件"
+                # 保留详细数据CSV文件，删除其他临时文件
+                mv "$SORTED_DETAIL_CSV" "${SORTED_DETAIL_CSV%.csv}_detail.csv"
+                rm -f "$MERGED_CSV" "$SUMMARY_CSV"
+            } || {
+                echo "警告: Excel转换失败，保留CSV格式文件"
+                mv "$SORTED_DETAIL_CSV" "${SORTED_DETAIL_CSV%.csv}_final.csv"
+                mv "$SUMMARY_CSV" "${SUMMARY_CSV%.csv}_final.csv"
+                rm -f "$MERGED_CSV"
+            }
+        else
+            echo "警告: 未找到Excel转换工具，保留CSV格式文件"
+            mv "$SORTED_DETAIL_CSV" "${SORTED_DETAIL_CSV%.csv}_detail_final.csv"
+            mv "$SUMMARY_CSV" "${SUMMARY_CSV%.csv}_summary_final.csv"
+            rm -f "$MERGED_CSV"
+        fi
+        
+        echo "完成时间段 $SINCE_DATE 到 $UNTIL_DATE 的文件合并"
+        echo ""
+        
+    done < "$SCRIPT_DIR/$TIME_PERIODS_FILE"
+    
+    # 删除所有中间生成的CSV文件
+    echo "清理中间文件..."
+    for csv_file in "${ALL_CSV_FILES[@]}"; do
+        if [ -f "$csv_file" ]; then
+            rm -f "$csv_file"
+            # echo "删除: $csv_file"
+        fi
+    done
+    
+    echo "========================================="
+    echo "文件合并处理完成"
+    echo "每个时间段的最终文件已生成并按用户首字母排序"
+    echo "Excel文件包含两个工作表："
+    echo "  1. 详细贡献数据 - 每个用户在每个仓库中的具体贡献值"
+    echo "  2. 汇总贡献统计 - 每个用户在该时间段的总贡献值"
+    echo "所有中间文件已删除"
+    echo "========================================="
+fi
 
 # 设置退出码
 if [ $FAILED_COUNT -eq 0 ]; then

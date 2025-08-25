@@ -150,9 +150,19 @@ git rebase "$REMOTE_NAME/$BRANCH_NAME" || {
 
 echo "Git操作完成，开始查询贡献值..."
 
-# 从仓库目录路径中提取仓库名称
+# 从仓库目录路径中提取仓库名称，使用组织名+仓库名避免重名
 REPO_NAME=$(basename "$REPO_DIR")
-echo "仓库名称: $REPO_NAME"
+# 从路径中提取组织名，例如从 /root/go/src/github.com/karmada-io/website 提取 karmada-io
+if [[ "$REPO_DIR" =~ github\.com/([^/]+)/([^/]+) ]]; then
+    ORG_NAME="${BASH_REMATCH[1]}"
+    REPO_BASENAME="${BASH_REMATCH[2]}"
+    UNIQUE_REPO_NAME="${ORG_NAME}_${REPO_BASENAME}"
+else
+    # 如果不是标准的github路径，使用父目录名+仓库名
+    PARENT_DIR=$(basename "$(dirname "$REPO_DIR")")
+    UNIQUE_REPO_NAME="${PARENT_DIR}_${REPO_NAME}"
+fi
+echo "仓库标识: $UNIQUE_REPO_NAME"
 
 # 检查时间文件是否存在
 if [ ! -f "$TIME_PERIODS_FILE" ]; then
@@ -265,13 +275,13 @@ for period in "${PERIODS[@]}"; do
     PERIOD="$SINCE_DATE - $UNTIL_DATE"
 
     # 设置该时间段的输出文件（保存在脚本目录）
-    OUTPUT_FILE="$SCRIPT_DIR/contributions_${REPO_NAME}_${BRANCH_NAME}_${SINCE_DATE}_${UNTIL_DATE}.csv"
-    echo "输出文件: $OUTPUT_FILE"
-    echo "用户名,新增代码行数,删除代码行数,贡献代码总行数,代码提交次数,超大提交代码行数(>1800行/commit),超大提交新增代码行数(>1800行/commit),超大提交删除代码行数(>1800行/commit),超大提交次数(>1800行/commit)" > "$OUTPUT_FILE"
+    OUTPUT_FILE="$SCRIPT_DIR/contributions_${UNIQUE_REPO_NAME}_${BRANCH_NAME}_${SINCE_DATE}_${UNTIL_DATE}.csv"
+    # echo "输出文件: $OUTPUT_FILE"
+    # echo "用户名,新增代码行数,删除代码行数,贡献代码总行数,代码提交次数,超大提交代码行数(>1800行/commit),超大提交新增代码行数(>1800行/commit),超大提交删除代码行数(>1800行/commit),超大提交次数(>1800行/commit)" > "$OUTPUT_FILE"
 
     # 对每个用户进行处理
     for AUTHOR in "${USERS[@]}"; do
-        echo "查询用户: $AUTHOR 在时间段 $PERIOD 的贡献值"
+        # echo "查询用户: $AUTHOR 在时间段 $PERIOD 的贡献值"
 
         # 调用函数并获取新增代码行数
         addition_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-addition)
@@ -337,7 +347,7 @@ for period in "${PERIODS[@]}"; do
             large_count_result="0"
         fi
         
-        echo "新增: $addition_result, 删除: $deletion_result，总行数: $total_result, 提交次数: $commits_result, 大提交代码行数: $large_commits_result, 大提交新增: $large_addition_result, 大提交删除: $large_deletion_result, 大提交次数: $large_count_result"
+        # echo "新增: $addition_result, 删除: $deletion_result，总行数: $total_result, 提交次数: $commits_result, 大提交代码行数: $large_commits_result, 大提交新增: $large_addition_result, 大提交删除: $large_deletion_result, 大提交次数: $large_count_result"
 
         # 写入CSV文件（使用逗号分隔，如果用户名包含逗号则用双引号包围）
         if [[ "$AUTHOR" == *","* ]]; then

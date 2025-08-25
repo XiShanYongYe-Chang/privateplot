@@ -5,7 +5,7 @@
 # Karmada repos
 /root/go/src/github.com/karmada-io/karmada master 
 /root/go/src/github.com/karmada-io/dashboard main
-/root/go/src/github.com/karmada-io/websitec main
+/root/go/src/github.com/karmada-io/website main
 /root/go/src/github.com/karmada-io/multicluster-cloud-provider main
 /root/go/src/github.com/karmada-io/community main
 # KubeEdge repos
