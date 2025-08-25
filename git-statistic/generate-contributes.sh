@@ -11,24 +11,28 @@ source "$SCRIPT_DIR/by-developer.sh"
 # 解析命令行参数
 REPO_DIR=""
 BRANCH_NAME=""
+INCLUDE_VENDOR=""
 REMOTE_NAME=""
 TIME_PERIODS_FILE=""
 USERS_FILE=""
 
 # 显示用法信息函数
 show_usage() {
-    echo "用法: $0 <仓库目录> <分支名称> [远程仓库名称] [时间段文件] [用户列表文件]"
-    echo "示例: $0 /path/to/repo main upstream time_periods.txt users.txt"
+    echo "用法: $0 <仓库目录> <分支名称> <是否包含vendor> [远程仓库名称] [时间段文件] [用户列表文件]"
+    echo "示例: $0 /path/to/repo main true upstream time_periods.txt users.txt"
     echo ""
     echo "参数说明："
     echo "  仓库目录       - Git仓库所在的目录路径"
     echo "  分支名称       - 要切换到的分支名称"
+    echo "  是否包含vendor - 是否统计vendor文件贡献（必填）"
+    echo "                  true：统计vendor文件，调用with-vendor函数"
+    echo "                  false：不统计vendor文件，调用普通函数"
     echo "  远程仓库名称   - 远程仓库名称（可选，默认：upstream）"
     echo "  时间段文件     - 包含时间段的文件（可选，默认：time_periods.txt）"
     echo "  用户列表文件   - 包含用户列表的文件（可选，默认：users.txt）"
     echo ""
     echo "注意:"
-    echo "- 前两个参数为必需参数"
+    echo "- 前三个参数为必需参数"
     echo "- 如果不提供时间段文件和用户列表文件，将使用脚本目录下的默认文件"
     echo "- 如果提供相对路径，将相对于脚本目录解析"
     echo "- 如果提供绝对路径，将直接使用"
@@ -40,8 +44,8 @@ show_usage() {
 }
 
 # 检查参数数量
-if [ $# -lt 2 ]; then
-    echo "错误: 必须提供至少两个参数：仓库目录和分支名称"
+if [ $# -lt 3 ]; then
+    echo "错误: 必须提供至少三个参数：仓库目录、分支名称和是否包含vendor"
     show_usage
     exit 1
 fi
@@ -49,37 +53,47 @@ fi
 # 获取必需的参数
 REPO_DIR="$1"
 BRANCH_NAME="$2"
+INCLUDE_VENDOR="$3"
+
+# 验证vendor参数
+if [[ "$INCLUDE_VENDOR" != "true" && "$INCLUDE_VENDOR" != "false" ]]; then
+    echo "错误: vendor参数只能为true或false"
+    show_usage
+    exit 1
+fi
+
+echo "是否包含vendor文件: $INCLUDE_VENDOR"
 
 # 获取可选的远程仓库名称参数
-if [ -z "$3" ]; then
+if [ -z "$4" ]; then
     REMOTE_NAME="upstream"
     echo "使用默认远程仓库名称: $REMOTE_NAME"
 else
-    REMOTE_NAME="$3"
+    REMOTE_NAME="$4"
 fi
 
 # 获取可选的文件参数
-if [ -z "$4" ]; then
+if [ -z "$5" ]; then
     TIME_PERIODS_FILE="$SCRIPT_DIR/time_periods.txt"
     echo "使用默认时间段文件: $TIME_PERIODS_FILE"
 else
     # 如果提供的是相对路径，则相对于脚本目录
-    if [[ "$4" != /* ]]; then
-        TIME_PERIODS_FILE="$SCRIPT_DIR/$4"
+    if [[ "$5" != /* ]]; then
+        TIME_PERIODS_FILE="$SCRIPT_DIR/$5"
     else
-        TIME_PERIODS_FILE="$4"
+        TIME_PERIODS_FILE="$5"
     fi
 fi
 
-if [ -z "$5" ]; then
+if [ -z "$6" ]; then
     USERS_FILE="$SCRIPT_DIR/users.txt"
     echo "使用默认用户文件: $USERS_FILE"
 else
     # 如果提供的是相对路径，则相对于脚本目录
-    if [[ "$5" != /* ]]; then
-        USERS_FILE="$SCRIPT_DIR/$5"
+    if [[ "$6" != /* ]]; then
+        USERS_FILE="$SCRIPT_DIR/$6"
     else
-        USERS_FILE="$5"
+        USERS_FILE="$6"
     fi
 fi
 
@@ -193,62 +207,6 @@ if [ ${#USERS[@]} -eq 0 ]; then
     exit 1
 fi
 
-# 检查contributions-period-total函数是否可用
-if ! type contributions-period-total >/dev/null 2>&1; then
-    echo "错误: contributions-period-total 函数未定义"
-    echo "请确保已加载包含该函数的脚本或环境"
-    exit 1
-fi
-
-# 检查contributions-period-addition函数是否可用
-if ! type contributions-period-addition >/dev/null 2>&1; then
-    echo "错误: contributions-period-addition 函数未定义"
-    echo "请确保已加载包含该函数的脚本或环境"
-    exit 1
-fi
-
-# 检查contributions-period-deletion函数是否可用
-if ! type contributions-period-deletion >/dev/null 2>&1; then
-    echo "错误: contributions-period-deletion 函数未定义"
-    echo "请确保已加载包含该函数的脚本或环境"
-    exit 1
-fi
-
-# 检查contributions-period-commits函数是否可用
-if ! type contributions-period-commits >/dev/null 2>&1; then
-    echo "错误: contributions-period-commits 函数未定义"
-    echo "请确保已加载包含该函数的脚本或环境"
-    exit 1
-fi
-
-# 检查contributions-period-large-commits-lines函数是否可用
-if ! type contributions-period-large-commits-lines >/dev/null 2>&1; then
-    echo "错误: contributions-period-large-commits-lines 函数未定义"
-    echo "请确保已加载包含该函数的脚本或环境"
-    exit 1
-fi
-
-# 检查contributions-period-large-commits-addition函数是否可用
-if ! type contributions-period-large-commits-addition >/dev/null 2>&1; then
-    echo "错误: contributions-period-large-commits-addition 函数未定义"
-    echo "请确保已加载包含该函数的脚本或环境"
-    exit 1
-fi
-
-# 检查contributions-period-large-commits-deletion函数是否可用
-if ! type contributions-period-large-commits-deletion >/dev/null 2>&1; then
-    echo "错误: contributions-period-large-commits-deletion 函数未定义"
-    echo "请确保已加载包含该函数的脚本或环境"
-    exit 1
-fi
-
-# 检查contributions-period-large-commits-count函数是否可用
-if ! type contributions-period-large-commits-count >/dev/null 2>&1; then
-    echo "错误: contributions-period-large-commits-count 函数未定义"
-    echo "请确保已加载包含该函数的脚本或环境"
-    exit 1
-fi
-
 # 输出文件按时间段分别生成（见下方循环）；文件名示例：contributions_YYYY-MM-DD_YYYY-MM-DD.csv
 
 # 首先读取所有时间段到数组中
@@ -283,66 +241,60 @@ for period in "${PERIODS[@]}"; do
     for AUTHOR in "${USERS[@]}"; do
         # echo "查询用户: $AUTHOR 在时间段 $PERIOD 的贡献值"
 
-        # 调用函数并获取新增代码行数
-        addition_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-addition)
+        # 根据vendor参数调用不同的基础统计函数
+        if [[ "$INCLUDE_VENDOR" == "true" ]]; then
+            # 包含vendor文件的统计，调用with-vendor函数
+            addition_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-addition-with-vendor)
+            deletion_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-deletion-with-vendor)
+            total_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-total-with-vendor)
+            commits_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-commits-with-vendor)
+        else
+            # 不包含vendor文件的统计，调用普通函数
+            addition_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-addition)
+            deletion_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-deletion)
+            total_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-total)
+            commits_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-commits)
+        fi
         
         # 如果结果为空或不是数字，设置为0
         if [[ -z "$addition_result" || ! "$addition_result" =~ ^[0-9]+$ ]]; then
             addition_result="0"
         fi
-        
-        # 调用函数并获取删除代码行数
-        deletion_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-deletion)
-        
-        # 如果结果为空或不是数字，设置为0
         if [[ -z "$deletion_result" || ! "$deletion_result" =~ ^[0-9]+$ ]]; then
             deletion_result="0"
         fi
-
-        # 调用函数并获取总贡献值
-        total_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-total)
-        
-        # 如果结果为空或不是数字，设置为0
         if [[ -z "$total_result" || ! "$total_result" =~ ^[0-9]+$ ]]; then
             total_result="0"
         fi
-        
-        # 调用函数并获取提交次数
-        commits_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-commits)
-        
-        # 如果结果为空或不是数字，设置为0
         if [[ -z "$commits_result" || ! "$commits_result" =~ ^[0-9]+$ ]]; then
             commits_result="0"
         fi
         
-        # 调用函数并获取大提交代码行数
-        large_commits_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-lines)
+        # 根据vendor参数统计超大提交相关数据
+        if [[ "$INCLUDE_VENDOR" == "true" ]]; then
+            # 包含vendor文件的超大提交统计
+            large_commits_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-lines-with-vendor)
+            large_addition_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-addition-with-vendor)
+            large_deletion_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-deletion-with-vendor)
+            large_count_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-count-with-vendor)
+        else
+            # 不包含vendor文件的超大提交统计
+            large_commits_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-lines)
+            large_addition_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-addition)
+            large_deletion_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-deletion)
+            large_count_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-count)
+        fi
         
         # 如果结果为空或不是数字，设置为0
         if [[ -z "$large_commits_result" || ! "$large_commits_result" =~ ^[0-9]+$ ]]; then
             large_commits_result="0"
         fi
-        
-        # 调用函数并获取大提交新增代码行数
-        large_addition_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-addition)
-        
-        # 如果结果为空或不是数字，设置为0
         if [[ -z "$large_addition_result" || ! "$large_addition_result" =~ ^[0-9]+$ ]]; then
             large_addition_result="0"
         fi
-        
-        # 调用函数并获取大提交删除代码行数
-        large_deletion_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-deletion)
-        
-        # 如果结果为空或不是数字，设置为0
         if [[ -z "$large_deletion_result" || ! "$large_deletion_result" =~ ^[0-9]+$ ]]; then
             large_deletion_result="0"
         fi
-        
-        # 调用函数并获取大提交次数
-        large_count_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-count)
-        
-        # 如果结果为空或不是数字，设置为0
         if [[ -z "$large_count_result" || ! "$large_count_result" =~ ^[0-9]+$ ]]; then
             large_count_result="0"
         fi

@@ -7,10 +7,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 显示用法信息函数
 show_usage() {
-    echo "用法: $0 [仓库配置文件] [时间段文件] [用户列表文件]"
-    echo "示例: $0 repos.txt time_periods.txt users.txt"
+    echo "用法: $0 <是否包含vendor> [仓库配置文件] [时间段文件] [用户列表文件]"
+    echo "示例: $0 true repos.txt time_periods.txt users.txt"
     echo ""
     echo "参数说明："
+    echo "  是否包含vendor - 是否统计vendor文件贡献（必填）"
+    echo "                  true：统计vendor文件，调用with-vendor函数"
+    echo "                  false：不统计vendor文件，调用普通函数"
     echo "  仓库配置文件   - 包含仓库信息的文件（可选，默认：repos.txt）"
     echo "  时间段文件     - 包含时间段的文件（可选，默认：time_periods.txt）"
     echo "  用户列表文件   - 包含用户列表的文件（可选，默认：users.txt）"
@@ -30,40 +33,50 @@ show_usage() {
     echo ""
 }
 
+# 检查是否提供了必填的vendor参数
+if [ $# -eq 0 ]; then
+    echo "错误: 必须提供vendor参数"
+    show_usage
+    exit 1
+fi
+
+# 获取第1个参数：是否包含vendor（必填）
+INCLUDE_VENDOR="$1"
+if [[ "$INCLUDE_VENDOR" != "true" && "$INCLUDE_VENDOR" != "false" ]]; then
+    echo "错误: vendor参数只能为true或false"
+    show_usage
+    exit 1
+fi
+
+echo "是否包含vendor文件: $INCLUDE_VENDOR"
+
 # 获取仓库配置文件参数
-if [ -z "$1" ]; then
+if [ -z "$2" ]; then
     REPOS_FILE="$SCRIPT_DIR/repos.txt"
     echo "使用默认仓库配置文件: $REPOS_FILE"
 else
     # 如果提供的是相对路径，则相对于脚本目录
-    if [[ "$1" != /* ]]; then
-        REPOS_FILE="$SCRIPT_DIR/$1"
+    if [[ "$2" != /* ]]; then
+        REPOS_FILE="$SCRIPT_DIR/$2"
     else
-        REPOS_FILE="$1"
+        REPOS_FILE="$2"
     fi
 fi
 
 # 获取时间段文件参数
-if [ -z "$2" ]; then
+if [ -z "$3" ]; then
     TIME_PERIODS_FILE="time_periods.txt"
     echo "使用默认时间段文件: $TIME_PERIODS_FILE"
 else
-    TIME_PERIODS_FILE="$2"
+    TIME_PERIODS_FILE="$3"
 fi
 
 # 获取用户列表文件参数
-if [ -z "$3" ]; then
+if [ -z "$4" ]; then
     USERS_FILE="users.txt"
     echo "使用默认用户列表文件: $USERS_FILE"
 else
-    USERS_FILE="$3"
-fi
-
-# 显示用法信息（如果没有提供参数）
-if [ $# -eq 0 ]; then
-    show_usage
-    echo "正在使用默认配置文件..."
-    echo ""
+    USERS_FILE="$4"
 fi
 
 # 检查仓库配置文件是否存在
@@ -131,7 +144,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     echo "========================================="
     
     # 调用generate-contributes.sh脚本
-    if "$GENERATE_SCRIPT" "$REPO_DIR" "$BRANCH_NAME" "$REMOTE_NAME" "$TIME_PERIODS_FILE" "$USERS_FILE"; then
+    if "$GENERATE_SCRIPT" "$REPO_DIR" "$BRANCH_NAME" "$INCLUDE_VENDOR" "$REMOTE_NAME" "$TIME_PERIODS_FILE" "$USERS_FILE"; then
         echo "✓ 仓库 $(basename "$REPO_DIR") 处理成功"
         SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
         
@@ -250,14 +263,13 @@ if [ $SUCCESS_COUNT -gt 0 ]; then
                  branch_name="unknown"
              fi
             
-            # 读取CSV文件（跳过标题行）并添加仓库和分支信息
-            {
-                tail -n +2 "$csv_file" | while IFS=',' read -r user add del total commits large_lines large_add large_del large_count; do
-                    # 处理可能包含引号的用户名
-                    user=$(echo "$user" | sed 's/^"//;s/"$//')
-                    echo "\"$user\",\"$repo_name\",\"$branch_name\",$add,$del,$total,$commits,$large_lines,$large_add,$large_del,$large_count"
-                done
-            } >> "$MERGED_CSV"
+             {
+                 tail -n +2 "$csv_file" | while IFS=',' read -r user add del total commits large_lines large_add large_del large_count; do
+                     # 处理可能包含引号的用户名
+                     user=$(echo "$user" | sed 's/^"//;s/"$//')
+                     echo "\"$user\",\"$repo_name\",\"$branch_name\",$add,$del,$total,$commits,$large_lines,$large_add,$large_del,$large_count"
+                 done
+             } >> "$MERGED_CSV"
         done
         
         # 对合并文件按用户名排序
