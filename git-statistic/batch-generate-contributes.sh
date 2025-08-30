@@ -264,10 +264,15 @@ if [ $SUCCESS_COUNT -gt 0 ]; then
              fi
             
              {
-                 tail -n +2 "$csv_file" | while IFS=',' read -r user add del total commits large_lines large_add large_del large_count; do
+                 # 不跳过第一行，因为原始CSV文件没有标题行
+                 cat "$csv_file" | while IFS=',' read -r user add del total commits large_lines large_add large_del large_count; do
                      # 处理可能包含引号的用户名
                      user=$(echo "$user" | sed 's/^"//;s/"$//')
-                     echo "\"$user\",\"$repo_name\",\"$branch_name\",$add,$del,$total,$commits,$large_lines,$large_add,$large_del,$large_count"
+                     
+                     # 确保用户名不为空且不是标题行
+                     if [[ -n "$user" && "$user" != "用户名" ]]; then
+                         echo "\"$user\",\"$repo_name\",\"$branch_name\",$add,$del,$total,$commits,$large_lines,$large_add,$large_del,$large_count"
+                     fi
                  done
              } >> "$MERGED_CSV"
         done
@@ -285,11 +290,19 @@ if [ $SUCCESS_COUNT -gt 0 ]; then
         SUMMARY_CSV="$SCRIPT_DIR/summary_contributions_${SINCE_DATE}_${UNTIL_DATE}.csv"
         echo "用户名,新增代码行数,删除代码行数,贡献代码总行数,代码提交次数,超大提交代码行数(>1800行/commit),超大提交新增代码行数(>1800行/commit),超大提交删除代码行数(>1800行/commit),超大提交次数(>1800行/commit)" > "$SUMMARY_CSV"
         
-        # 使用awk来汇总数据
+        # 使用awk来汇总数据（跳过标题行）
         tail -n +2 "$MERGED_CSV" | awk -F',' '
         {
+            # 提取用户名，处理引号包围的字段
             user = $1
             gsub(/^"|"$/, "", user)  # 移除引号
+            
+            # 确保用户名不为空
+            if (user == "") {
+                next
+            }
+            
+            # 累加各项数据
             add[user] += $4
             del[user] += $5
             total[user] += $6
@@ -305,6 +318,7 @@ if [ $SUCCESS_COUNT -gt 0 ]; then
             for (u in add) {
                 users[n++] = u
             }
+            
             # 简单的冒泡排序按用户名首字母排序
             for (i = 0; i < n-1; i++) {
                 for (j = 0; j < n-1-i; j++) {
@@ -315,6 +329,7 @@ if [ $SUCCESS_COUNT -gt 0 ]; then
                     }
                 }
             }
+            
             # 输出排序后的结果
             for (i = 0; i < n; i++) {
                 u = users[i]

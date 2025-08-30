@@ -235,7 +235,9 @@ for period in "${PERIODS[@]}"; do
     # 设置该时间段的输出文件（保存在脚本目录）
     OUTPUT_FILE="$SCRIPT_DIR/contributions_${UNIQUE_REPO_NAME}_${BRANCH_NAME}_${SINCE_DATE}_${UNTIL_DATE}.csv"
     # echo "输出文件: $OUTPUT_FILE"
-    # echo "用户名,新增代码行数,删除代码行数,贡献代码总行数,代码提交次数,超大提交代码行数(>1800行/commit),超大提交新增代码行数(>1800行/commit),超大提交删除代码行数(>1800行/commit),超大提交次数(>1800行/commit)" > "$OUTPUT_FILE"
+    
+    # 清空输出文件（重要：避免重复数据）
+    > "$OUTPUT_FILE"
 
     # 对每个用户进行处理
     for AUTHOR in "${USERS[@]}"; do
