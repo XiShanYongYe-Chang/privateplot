@@ -94,7 +94,7 @@ function contributions-period-commits-with-vendor {
 # UNTIL_DATE="2023-01-01"
 function contributions-period-large-commits-lines {
     local result
-    result=$(git log --no-merges --since ${SINCE_DATE} --until ${UNTIL_DATE} --author "${AUTHOR}" --numstat |\
+    result=$(git log --no-merges --since ${SINCE_DATE} --until ${UNTIL_DATE} --author "${AUTHOR}" --numstat --format="COMMIT:%H|%s|%ad" --date=short |\
         grep -v "versioned_docs" | grep -v "infra/gen-resourcesdocs/" | grep -v "v1-" |\
         grep -v "reference" | grep -v "vendor" |\
         grep -Pv "Date:|insertion|deletion|file|Bin|\.svg|\.drawio|generated|yaml|\.json|html|go\.sum|\.pb\.go|\.pb-c|\=\>" |\
@@ -103,13 +103,37 @@ function contributions-period-large-commits-lines {
             current_commit = ""
             commit_lines = 0
             large_commits_total_lines = 0
+            commit_hash = ""
+            commit_subject = ""
+            commit_date = ""
         }
-        /^commit [0-9a-f]{7,}/ {
-            # 如果上一个commit的代码行数超过1800，累加其代码行数
-            if (current_commit != "" && commit_lines > 1800) {
-                large_commits_total_lines += commit_lines
+        /^COMMIT:/ {
+            # 如果有上一个commit，检查是否为超大提交并根据参数决定是否打印信息
+            if (current_commit != "") {
+                if (commit_lines > 1800) {
+                    large_commits_total_lines += commit_lines
+                    if (ENVIRON["PRINT_COMMIT_INFO"] == "true") {
+                        print "提交信息: " commit_hash " (超大提交 >1800行)" > "/dev/stderr"
+                        print "  消息: " commit_subject > "/dev/stderr"
+                        print "  日期: " commit_date > "/dev/stderr"
+                        print "  行数: " commit_lines > "/dev/stderr"
+                        print "" > "/dev/stderr"
+                    }
+                } else {
+                    if (ENVIRON["PRINT_COMMIT_INFO"] == "true") {
+                        print "提交信息: " commit_hash > "/dev/stderr"
+                        print "  消息: " commit_subject > "/dev/stderr"
+                        print "  日期: " commit_date > "/dev/stderr"
+                        print "  行数: " commit_lines > "/dev/stderr"
+                        print "" > "/dev/stderr"
+                    }
+                }
             }
-            # 开始新的commit
+            # 解析新的commit信息
+            split($0, parts, "|")
+            commit_hash = substr(parts[1], 8)  # 去掉"COMMIT:"前缀
+            commit_subject = parts[2]
+            commit_date = parts[3]
             current_commit = $0
             commit_lines = 0
         }
@@ -119,8 +143,25 @@ function contributions-period-large-commits-lines {
         }
         END {
             # 检查最后一个commit
-            if (current_commit != "" && commit_lines > 1800) {
-                large_commits_total_lines += commit_lines
+            if (current_commit != "") {
+                if (commit_lines > 1800) {
+                    large_commits_total_lines += commit_lines
+                    if (ENVIRON["PRINT_COMMIT_INFO"] == "true") {
+                        print "提交信息: " commit_hash " (超大提交 >1800行)" > "/dev/stderr"
+                        print "  消息: " commit_subject > "/dev/stderr"
+                        print "  日期: " commit_date > "/dev/stderr"
+                        print "  行数: " commit_lines > "/dev/stderr"
+                        print "" > "/dev/stderr"
+                    }
+                } else {
+                    if (ENVIRON["PRINT_COMMIT_INFO"] == "true") {
+                        print "提交信息: " commit_hash > "/dev/stderr"
+                        print "  消息: " commit_subject > "/dev/stderr"
+                        print "  日期: " commit_date > "/dev/stderr"
+                        print "  行数: " commit_lines > "/dev/stderr"
+                        print "" > "/dev/stderr"
+                    }
+                }
             }
             print large_commits_total_lines
         }')
@@ -129,30 +170,71 @@ function contributions-period-large-commits-lines {
 
 function contributions-period-large-commits-lines-with-vendor {
     local result
-    result=$(git log --no-merges --since ${SINCE_DATE} --until ${UNTIL_DATE} --author "${AUTHOR}" --numstat |\
+    result=$(git log --no-merges --since ${SINCE_DATE} --until ${UNTIL_DATE} --author "${AUTHOR}" --numstat --format="COMMIT:%H|%s|%ad" --date=short |\
         awk '
         BEGIN {
             current_commit = ""
             commit_lines = 0
             large_commits_total_lines = 0
+            commit_hash = ""
+            commit_subject = ""
+            commit_date = ""
         }
-        /^commit [0-9a-f]{7,}/ {
-            # 如果上一个commit的代码行数超过1800，累加其代码行数
-            if (current_commit != "" && commit_lines > 1800) {
-                large_commits_total_lines += commit_lines
-            }
-            # 开始新的commit
-            current_commit = $0
-            commit_lines = 0
-        }
+                 /^COMMIT:/ {
+             # 如果有上一个commit，检查是否为超大提交并根据参数决定是否打印信息
+             if (current_commit != "") {
+                 if (commit_lines > 1800) {
+                     large_commits_total_lines += commit_lines
+                     if (ENVIRON["PRINT_COMMIT_INFO"] == "true") {
+                         print "提交信息: " commit_hash " (超大提交 >1800行)" > "/dev/stderr"
+                         print "  消息: " commit_subject > "/dev/stderr"
+                         print "  日期: " commit_date > "/dev/stderr"
+                         print "  行数: " commit_lines > "/dev/stderr"
+                         print "" > "/dev/stderr"
+                     }
+                 } else {
+                     if (ENVIRON["PRINT_COMMIT_INFO"] == "true") {
+                         print "提交信息: " commit_hash > "/dev/stderr"
+                         print "  消息: " commit_subject > "/dev/stderr"
+                         print "  日期: " commit_date > "/dev/stderr"
+                         print "  行数: " commit_lines > "/dev/stderr"
+                         print "" > "/dev/stderr"
+                     }
+                 }
+             }
+             # 解析新的commit信息
+             split($0, parts, "|")
+             commit_hash = substr(parts[1], 8)  # 去掉"COMMIT:"前缀
+             commit_subject = parts[2]
+             commit_date = parts[3]
+             current_commit = $0
+             commit_lines = 0
+         }
         /^[0-9]+\t[0-9]+/ {
             # 累加代码行数（新增+删除）
             commit_lines += $1 + $2
         }
         END {
             # 检查最后一个commit
-            if (current_commit != "" && commit_lines > 1800) {
-                large_commits_total_lines += commit_lines
+            if (current_commit != "") {
+                if (commit_lines > 1800) {
+                    large_commits_total_lines += commit_lines
+                    if (ENVIRON["PRINT_COMMIT_INFO"] == "true") {
+                        print "提交信息: " commit_hash " (超大提交 >1800行)" > "/dev/stderr"
+                        print "  消息: " commit_subject > "/dev/stderr"
+                        print "  日期: " commit_date > "/dev/stderr"
+                        print "  行数: " commit_lines > "/dev/stderr"
+                        print "" > "/dev/stderr"
+                    }
+                } else {
+                    if (ENVIRON["PRINT_COMMIT_INFO"] == "true") {
+                        print "提交信息: " commit_hash > "/dev/stderr"
+                        print "  消息: " commit_subject > "/dev/stderr"
+                        print "  日期: " commit_date > "/dev/stderr"
+                        print "  行数: " commit_lines > "/dev/stderr"
+                        print "" > "/dev/stderr"
+                    }
+                }
             }
             print large_commits_total_lines
         }')

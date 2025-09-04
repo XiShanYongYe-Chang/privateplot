@@ -15,21 +15,25 @@ INCLUDE_VENDOR=""
 REMOTE_NAME=""
 TIME_PERIODS_FILE=""
 USERS_FILE=""
+PRINT_COMMIT_INFO=""
 
 # 显示用法信息函数
 show_usage() {
-    echo "用法: $0 <仓库目录> <分支名称> <是否包含vendor> [远程仓库名称] [时间段文件] [用户列表文件]"
-    echo "示例: $0 /path/to/repo main true upstream time_periods.txt users.txt"
+    echo "用法: $0 <仓库目录> <分支名称> <是否包含vendor> [远程仓库名称] [时间段文件] [用户列表文件] [是否打印commit信息]"
+    echo "示例: $0 /path/to/repo main true upstream time_periods.txt users.txt true"
     echo ""
     echo "参数说明："
-    echo "  仓库目录       - Git仓库所在的目录路径"
-    echo "  分支名称       - 要切换到的分支名称"
-    echo "  是否包含vendor - 是否统计vendor文件贡献（必填）"
-    echo "                  true：统计vendor文件，调用with-vendor函数"
-    echo "                  false：不统计vendor文件，调用普通函数"
-    echo "  远程仓库名称   - 远程仓库名称（可选，默认：upstream）"
-    echo "  时间段文件     - 包含时间段的文件（可选，默认：time_periods.txt）"
-    echo "  用户列表文件   - 包含用户列表的文件（可选，默认：users.txt）"
+    echo "  仓库目录         - Git仓库所在的目录路径"
+    echo "  分支名称         - 要切换到的分支名称"
+    echo "  是否包含vendor   - 是否统计vendor文件贡献（必填）"
+    echo "                    true：统计vendor文件，调用with-vendor函数"
+    echo "                    false：不统计vendor文件，调用普通函数"
+    echo "  远程仓库名称     - 远程仓库名称（可选，默认：upstream）"
+    echo "  时间段文件       - 包含时间段的文件（可选，默认：time_periods.txt）"
+    echo "  用户列表文件     - 包含用户列表的文件（可选，默认：users.txt）"
+    echo "  是否打印commit信息 - 是否打印每个commit的详细信息（可选，默认：false）"
+    echo "                    true：打印所有commit信息"
+    echo "                    false：不打印commit信息"
     echo ""
     echo "注意:"
     echo "- 前三个参数为必需参数"
@@ -95,6 +99,21 @@ else
     else
         USERS_FILE="$6"
     fi
+fi
+
+# 获取可选的打印commit信息参数
+if [ -z "$7" ]; then
+    PRINT_COMMIT_INFO="false"
+    echo "使用默认设置: 不打印commit信息"
+else
+    PRINT_COMMIT_INFO="$7"
+    # 验证参数值
+    if [[ "$PRINT_COMMIT_INFO" != "true" && "$PRINT_COMMIT_INFO" != "false" ]]; then
+        echo "错误: 打印commit信息参数只能为true或false"
+        show_usage
+        exit 1
+    fi
+    echo "是否打印commit信息: $PRINT_COMMIT_INFO"
 fi
 
 # 显示用法信息（如果没有提供参数）
@@ -275,13 +294,13 @@ for period in "${PERIODS[@]}"; do
         # 根据vendor参数统计超大提交相关数据
         if [[ "$INCLUDE_VENDOR" == "true" ]]; then
             # 包含vendor文件的超大提交统计
-            large_commits_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-lines-with-vendor)
+            large_commits_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" PRINT_COMMIT_INFO="$PRINT_COMMIT_INFO" contributions-period-large-commits-lines-with-vendor)
             large_addition_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-addition-with-vendor)
             large_deletion_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-deletion-with-vendor)
             large_count_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-count-with-vendor)
         else
             # 不包含vendor文件的超大提交统计
-            large_commits_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-lines)
+            large_commits_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" PRINT_COMMIT_INFO="$PRINT_COMMIT_INFO" contributions-period-large-commits-lines)
             large_addition_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-addition)
             large_deletion_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-deletion)
             large_count_result=$(AUTHOR="$AUTHOR" SINCE_DATE="$SINCE_DATE" UNTIL_DATE="$UNTIL_DATE" contributions-period-large-commits-count)
