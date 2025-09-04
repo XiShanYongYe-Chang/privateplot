@@ -222,7 +222,12 @@ process_repository() {
             comments=$(echo "$response" | jq -r --arg username "$user" \
         '.[] | select(.user.login == $username) | .id')
             local page_count
-            page_count=$(echo "$comments" | wc -l)
+            # 修复：当没有评论时，comments为空字符串，wc -l会返回1，需要特殊处理
+            if [ -z "$comments" ] || [ "$comments" = "" ]; then
+                page_count=0
+            else
+                page_count=$(echo "$comments" | wc -l)
+            fi
             
             # 确保PAGE_COUNT是数字
             if ! [[ "$page_count" =~ ^[0-9]+$ ]]; then
